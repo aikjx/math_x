@@ -1,0 +1,475 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D螺旋时空动画测试</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background: linear-gradient(to bottom, #000000, #1a0033, #000000);
+            font-family: 'Courier New', monospace;
+            overflow: hidden;
+        }
+        
+        #canvas {
+            display: block;
+            cursor: grab;
+        }
+        
+        #canvas:active {
+            cursor: grabbing;
+        }
+        
+        .control-panel {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            background: rgba(0, 0, 0, 0.9);
+            color: white;
+            padding: 20px;
+            border-radius: 15px;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(139, 92, 246, 0.3);
+            max-width: 300px;
+        }
+        
+        .control-panel h3 {
+            color: #a855f7;
+            margin-bottom: 15px;
+        }
+        
+        .control-group {
+            margin-bottom: 15px;
+        }
+        
+        .control-group label {
+            display: block;
+            color: #c084fc;
+            margin-bottom: 5px;
+            font-size: 14px;
+        }
+        
+        .control-group input[type="range"] {
+            width: 100%;
+            height: 8px;
+            background: #4c1d95;
+            border-radius: 5px;
+            outline: none;
+            -webkit-appearance: none;
+        }
+        
+        .control-group input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 16px;
+            height: 16px;
+            background: linear-gradient(45deg, #8b5cf6, #a855f7);
+            border-radius: 50%;
+            cursor: pointer;
+            box-shadow: 0 0 10px rgba(139, 92, 246, 0.5);
+        }
+        
+        .info-panel {
+            position: absolute;
+            bottom: 20px;
+            right: 20px;
+            background: rgba(0, 0, 0, 0.9);
+            color: white;
+            padding: 15px;
+            border-radius: 15px;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(139, 92, 246, 0.3);
+        }
+        
+        .info-panel h4 {
+            color: #a855f7;
+            margin-bottom: 10px;
+        }
+        
+        .info-panel p {
+            margin: 5px 0;
+            font-size: 14px;
+            color: #c084fc;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="canvas"></canvas>
+    
+    <div class="control-panel">
+        <h3>🌌 3D时空控制台</h3>
+        
+        <div class="control-group">
+            <label>时间流速: <span id="timeScale">1.0</span>x</label>
+            <input type="range" id="timeScaleSlider" min="0.1" max="3" step="0.1" value="1.0">
+        </div>
+        
+        <div class="control-group">
+            <label>螺旋半径: <span id="helixRadius">120</span></label>
+            <input type="range" id="helixRadiusSlider" min="60" max="200" step="10" value="120">
+        </div>
+        
+        <div class="control-group">
+            <label>螺旋密度: <span id="helixPitch">3.0</span></label>
+            <input type="range" id="helixPitchSlider" min="1" max="8" step="0.5" value="3">
+        </div>
+        
+        <div class="control-group">
+            <label>粒子数量: <span id="particleCount">80</span></label>
+            <input type="range" id="particleCountSlider" min="30" max="150" step="10" value="80">
+        </div>
+        
+        <div class="control-group">
+            <label>旋转速度: <span id="rotationSpeed">0.5</span></label>
+            <input type="range" id="rotationSpeedSlider" min="0.1" max="2" step="0.1" value="0.5">
+        </div>
+    </div>
+    
+    <div class="info-panel">
+        <h4>🎮 操作指南</h4>
+        <p>🖱️ 拖拽旋转视角</p>
+        <p>🎡 滚轮缩放距离</p>
+        <p>⚡ 实时参数调节</p>
+        <p>🌀 3D螺旋时空可视化</p>
+    </div>
+
+    <script>
+        // 3D螺旋时空动画实现
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        
+        // 参数设置
+        let params = {
+            timeScale: 1.0,
+            helixRadius: 120,
+            helixPitch: 3,
+            particleCount: 80,
+            rotationSpeed: 0.5,
+            zoomLevel: 1.0
+        };
+        
+        // 相机设置
+        let camera = {
+            x: 0, y: 0, z: 500,
+            rotX: 0, rotY: 0,
+            targetRotX: 0, targetRotY: 0
+        };
+        
+        // 鼠标交互
+        let mouse = { x: 0, y: 0, isDown: false };
+        
+        // 粒子系统
+        let particles = [];
+        let time = 0;
+        
+        // 初始化画布
+        function resizeCanvas() {
+            canvas.width = window.innerWidth * window.devicePixelRatio;
+            canvas.height = window.innerHeight * window.devicePixelRatio;
+            canvas.style.width = window.innerWidth + 'px';
+            canvas.style.height = window.innerHeight + 'px';
+            ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
+        }
+        
+        // 初始化粒子
+        function initParticles() {
+            particles = [];
+            for (let i = 0; i < params.particleCount; i++) {
+                particles.push({
+                    x: 0, y: 0, z: 0,
+                    age: 0,
+                    maxAge: 200 + Math.random() * 100,
+                    size: 2 + Math.random() * 4,
+                    hue: (i / params.particleCount) * 360,
+                    trail: []
+                });
+            }
+        }
+        
+        // 3D投影
+        function project3D(x, y, z) {
+            const cosX = Math.cos(camera.rotX);
+            const sinX = Math.sin(camera.rotX);
+            const cosY = Math.cos(camera.rotY);
+            const sinY = Math.sin(camera.rotY);
+            
+            const x1 = x * cosY - z * sinY;
+            const z1 = x * sinY + z * cosY;
+            const y1 = y * cosX - z1 * sinX;
+            const z2 = y * sinX + z1 * cosX + camera.z;
+            
+            const perspective = 800 / (800 + z2);
+            return {
+                x: x1 * perspective,
+                y: y1 * perspective,
+                z: z2,
+                scale: perspective
+            };
+        }
+        
+        // 动画循环
+        function animate() {
+            const width = canvas.style.width.replace('px', '') * 1;
+            const height = canvas.style.height.replace('px', '') * 1;
+            const centerX = width / 2;
+            const centerY = height / 2;
+            
+            // 清空画布，创建深空背景
+            const gradient = ctx.createRadialGradient(centerX, centerY, 0, centerX, centerY, Math.max(width, height));
+            gradient.addColorStop(0, '#0a0a2e');
+            gradient.addColorStop(0.5, '#16213e');
+            gradient.addColorStop(1, '#0f0f23');
+            ctx.fillStyle = gradient;
+            ctx.fillRect(0, 0, width, height);
+            
+            // 平滑相机旋转
+            camera.rotX += (camera.targetRotX - camera.rotX) * 0.1;
+            camera.rotY += (camera.targetRotY - camera.rotY) * 0.1;
+            
+            time += 0.016 * params.timeScale;
+            
+            // 更新粒子位置
+            particles.forEach((particle, i) => {
+                const phase = (i / params.particleCount) * Math.PI * 2;
+                const t = time + phase;
+                
+                // 三维螺旋时空方程
+                const baseRadius = params.helixRadius * (0.8 + 0.4 * Math.sin(t * 0.3));
+                const x = baseRadius * Math.cos(t * params.rotationSpeed);
+                const z = baseRadius * Math.sin(t * params.rotationSpeed);
+                const y = (t * params.helixPitch * 10) % 400 - 200;
+                
+                // 时空扭曲效果
+                const distortion = Math.sin(t * 0.7) * 20;
+                particle.x = x + Math.cos(t * 2) * distortion;
+                particle.y = y + Math.sin(t * 1.5) * distortion * 0.5;
+                particle.z = z + Math.sin(t * 2.3) * distortion;
+                
+                // 更新轨迹
+                particle.trail.unshift({
+                    x: particle.x,
+                    y: particle.y,
+                    z: particle.z,
+                    alpha: 1.0
+                });
+                
+                if (particle.trail.length > 15) {
+                    particle.trail.pop();
+                }
+                
+                particle.trail.forEach((point, index) => {
+                    point.alpha = 1 - (index / particle.trail.length);
+                });
+                
+                particle.age++;
+                particle.hue = (particle.hue + 0.5) % 360;
+                particle.size = 2 + Math.sin(t + i) * 2;
+            });
+            
+            // 绘制3D时空网格
+            ctx.strokeStyle = 'rgba(138, 43, 226, 0.3)';
+            ctx.lineWidth = 1;
+            
+            // 绘制螺旋网格线
+            for (let layer = 0; layer < 5; layer++) {
+                const radius = 50 + layer * 40;
+                const points = [];
+                
+                for (let angle = 0; angle <= Math.PI * 4; angle += 0.1) {
+                    const x = radius * Math.cos(angle);
+                    const z = radius * Math.sin(angle);
+                    const y = (angle * 30) % 400 - 200;
+                    
+                    const projected = project3D(x, y, z);
+                    points.push({
+                        x: centerX + projected.x * params.zoomLevel,
+                        y: centerY + projected.y * params.zoomLevel,
+                        scale: projected.scale
+                    });
+                }
+                
+                ctx.beginPath();
+                points.forEach((point, index) => {
+                    if (point.scale > 0.1) {
+                        if (index === 0) {
+                            ctx.moveTo(point.x, point.y);
+                        } else {
+                            ctx.lineTo(point.x, point.y);
+                        }
+                    }
+                });
+                ctx.stroke();
+            }
+            
+            // 绘制中心物体
+            const centralObject = project3D(0, 0, 0);
+            if (centralObject.scale > 0) {
+                const pulsation = Math.sin(time * 3) * 0.3 + 1;
+                const size = 25 * pulsation * centralObject.scale * params.zoomLevel;
+                
+                const ballGradient = ctx.createRadialGradient(
+                    centerX + centralObject.x * params.zoomLevel - size * 0.3,
+                    centerY + centralObject.y * params.zoomLevel - size * 0.3,
+                    0,
+                    centerX + centralObject.x * params.zoomLevel,
+                    centerY + centralObject.y * params.zoomLevel,
+                    size
+                );
+                ballGradient.addColorStop(0, '#ffaa00');
+                ballGradient.addColorStop(0.3, '#ff6600');
+                ballGradient.addColorStop(0.7, '#cc3300');
+                ballGradient.addColorStop(1, '#660000');
+                
+                ctx.fillStyle = ballGradient;
+                ctx.shadowColor = '#ff4400';
+                ctx.shadowBlur = 30;
+                ctx.beginPath();
+                ctx.arc(
+                    centerX + centralObject.x * params.zoomLevel,
+                    centerY + centralObject.y * params.zoomLevel,
+                    size,
+                    0,
+                    Math.PI * 2
+                );
+                ctx.fill();
+                ctx.shadowBlur = 0;
+            }
+            
+            // 按深度排序粒子
+            const sortedParticles = particles
+                .map((particle, index) => ({
+                    particle,
+                    index,
+                    projected: project3D(particle.x, particle.y, particle.z)
+                }))
+                .filter(item => item.projected.scale > 0.05)
+                .sort((a, b) => b.projected.z - a.projected.z);
+            
+            // 绘制粒子轨迹
+            sortedParticles.forEach(({ particle, projected }) => {
+                if (particle.trail.length > 1) {
+                    ctx.strokeStyle = `hsla(${particle.hue}, 80%, 60%, 0.6)`;
+                    ctx.lineWidth = 2 * projected.scale;
+                    ctx.beginPath();
+                    
+                    particle.trail.forEach((point, index) => {
+                        const trailProjected = project3D(point.x, point.y, point.z);
+                        if (trailProjected.scale > 0.05) {
+                            const screenX = centerX + trailProjected.x * params.zoomLevel;
+                            const screenY = centerY + trailProjected.y * params.zoomLevel;
+                            
+                            if (index === 0) {
+                                ctx.moveTo(screenX, screenY);
+                            } else {
+                                ctx.lineTo(screenX, screenY);
+                            }
+                        }
+                    });
+                    ctx.stroke();
+                }
+            });
+            
+            // 绘制粒子
+            sortedParticles.forEach(({ particle, projected }) => {
+                const screenX = centerX + projected.x * params.zoomLevel;
+                const screenY = centerY + projected.y * params.zoomLevel;
+                const size = particle.size * projected.scale * params.zoomLevel;
+                
+                // 粒子光晕效果
+                const particleGradient = ctx.createRadialGradient(
+                    screenX, screenY, 0,
+                    screenX, screenY, size * 2
+                );
+                particleGradient.addColorStop(0, `hsla(${particle.hue}, 100%, 70%, 0.9)`);
+                particleGradient.addColorStop(0.5, `hsla(${particle.hue}, 80%, 50%, 0.6)`);
+                particleGradient.addColorStop(1, `hsla(${particle.hue}, 60%, 30%, 0)`);
+                
+                ctx.fillStyle = particleGradient;
+                ctx.beginPath();
+                ctx.arc(screenX, screenY, size * 2, 0, Math.PI * 2);
+                ctx.fill();
+                
+                // 粒子核心
+                ctx.fillStyle = `hsla(${particle.hue}, 100%, 80%, 1)`;
+                ctx.beginPath();
+                ctx.arc(screenX, screenY, size, 0, Math.PI * 2);
+                ctx.fill();
+            });
+            
+            // 绘制方程式
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+            ctx.font = 'bold 18px "Courier New", monospace';
+            ctx.textAlign = 'center';
+            ctx.shadowColor = '#8a2be2';
+            ctx.shadowBlur = 10;
+            ctx.fillText('时空同一化方程: ds² = c²dt² - dx² - dy² - dz²', centerX, 50);
+            
+            ctx.font = 'bold 16px "Courier New", monospace';
+            ctx.fillText('三维螺旋时空: r⃗(t) = R·cos(ωt + φ)î + R·sin(ωt + φ)ĵ + h·t·k̂', centerX, 80);
+            ctx.shadowBlur = 0;
+            
+            requestAnimationFrame(animate);
+        }
+        
+        // 事件监听
+        canvas.addEventListener('mousemove', (e) => {
+            mouse.x = e.clientX;
+            mouse.y = e.clientY;
+            
+            if (mouse.isDown) {
+                camera.targetRotY += e.movementX * 0.01;
+                camera.targetRotX += e.movementY * 0.01;
+                camera.targetRotX = Math.max(-Math.PI/2, Math.min(Math.PI/2, camera.targetRotX));
+            }
+        });
+        
+        canvas.addEventListener('mousedown', () => {
+            mouse.isDown = true;
+        });
+        
+        canvas.addEventListener('mouseup', () => {
+            mouse.isDown = false;
+        });
+        
+        canvas.addEventListener('wheel', (e) => {
+            e.preventDefault();
+            camera.z += e.deltaY * 0.1;
+            camera.z = Math.max(200, Math.min(1000, camera.z));
+        });
+        
+        // 控制面板事件
+        document.getElementById('timeScaleSlider').addEventListener('input', (e) => {
+            params.timeScale = parseFloat(e.target.value);
+            document.getElementById('timeScale').textContent = params.timeScale.toFixed(1);
+        });
+        
+        document.getElementById('helixRadiusSlider').addEventListener('input', (e) => {
+            params.helixRadius = parseFloat(e.target.value);
+            document.getElementById('helixRadius').textContent = params.helixRadius.toFixed(0);
+        });
+        
+        document.getElementById('helixPitchSlider').addEventListener('input', (e) => {
+            params.helixPitch = parseFloat(e.target.value);
+            document.getElementById('helixPitch').textContent = params.helixPitch.toFixed(1);
+        });
+        
+        document.getElementById('particleCountSlider').addEventListener('input', (e) => {
+            params.particleCount = parseInt(e.target.value);
+            document.getElementById('particleCount').textContent = params.particleCount;
+            initParticles();
+        });
+        
+        document.getElementById('rotationSpeedSlider').addEventListener('input', (e) => {
+            params.rotationSpeed = parseFloat(e.target.value);
+            document.getElementById('rotationSpeed').textContent = params.rotationSpeed.toFixed(1);
+        });
+        
+        // 初始化
+        window.addEventListener('resize', resizeCanvas);
+        resizeCanvas();
+        initParticles();
+        animate();
+    </script>
+</body>
+</html>
